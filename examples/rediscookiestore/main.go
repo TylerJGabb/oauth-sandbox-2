@@ -26,7 +26,7 @@ func main() {
 
 	store.Options(sessions.Options{
 		Path:     "/",
-		MaxAge:   60 * 60,              // 1 hour
+		MaxAge:   5,
 		HttpOnly: true,                 // not readable by JS
 		Secure:   false,                // if this is deployed behind TLS, set this to true
 		SameSite: http.SameSiteLaxMode, // adjust as needed
@@ -48,7 +48,7 @@ func main() {
 		session := sessions.Default(ctx)
 		user := session.Get("user")
 		if user == nil {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized, session invalid or expired"})
 			return
 		}
 		ctx.JSON(http.StatusOK, gin.H{"user": user})
