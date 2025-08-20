@@ -82,7 +82,7 @@ func main() {
 			url := url.URL{
 				Path: "/whoops",
 				RawQuery: url.Values{
-					"error": {"auth_server_did_not_send_code"},
+					"error": {"The authorization server did not send a code"},
 				}.Encode(),
 			}
 			ctx.Redirect(http.StatusTemporaryRedirect, url.String())
