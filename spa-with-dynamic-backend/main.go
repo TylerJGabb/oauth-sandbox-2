@@ -65,80 +65,6 @@ func main() {
 	r := gin.Default()
 	r.Use(sessions.Sessions("session-storage", store))
 
-	r.GET("/login", func(ctx *gin.Context) {
-		name := ctx.Query("name")
-		verifier := oauth2.GenerateVerifier()
-
-		session := sessions.Default(ctx)
-		session.Set("user", name)
-		session.Set("verifier", verifier)
-		session.Save()
-
-		stateNotUsed := "state_not_used"
-		redirectUrl := oAuthConf.AuthCodeURL(stateNotUsed,
-			oauth2.S256ChallengeOption(verifier),
-			oauth2.SetAuthURLParam("audience", "https://contacts.example.com"),
-		)
-		ctx.Redirect(http.StatusTemporaryRedirect, redirectUrl)
-	})
-
-	r.GET("/oauth-callback", func(ctx *gin.Context) {
-		code := ctx.Query("code")
-		if code == "" {
-			log.Default().Println("The authorization server did not send a code")
-			url := url.URL{
-				Path: "/whoops",
-				RawQuery: url.Values{
-					"error": {"The authorization server did not send a code"},
-				}.Encode(),
-			}
-			ctx.Redirect(http.StatusTemporaryRedirect, url.String())
-			return
-		}
-
-		session := sessions.Default(ctx)
-		if session == nil {
-			ctx.Redirect(http.StatusTemporaryRedirect, "/login")
-			return
-		}
-
-		verifier, ok := session.Get("verifier").(string)
-		if !ok {
-			log.Default().Printf("Failed to get verifier from session")
-			url := url.URL{
-				Path: "/whoops",
-				RawQuery: url.Values{
-					"error": {"Failed to get verifier from session"},
-				}.Encode(),
-			}
-			ctx.Redirect(http.StatusTemporaryRedirect, url.String())
-			return
-		}
-
-		token, err := oAuthConf.Exchange(
-			ctx.Request.Context(),
-			code,
-			oauth2.VerifierOption(verifier),
-		)
-
-		if err != nil {
-			log.Default().Printf("Failed to exchange token: %v", err)
-			ctx.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to exchange token"})
-			url := url.URL{
-				Path: "/whoops",
-				RawQuery: url.Values{
-					"error": {fmt.Sprintf("Failed to exchange token: %v", err)},
-				}.Encode(),
-			}
-			ctx.Redirect(http.StatusTemporaryRedirect, url.String())
-			return
-		}
-
-		session.Set("access_token", token.AccessToken)
-		session.Save()
-		ctx.Redirect(http.StatusTemporaryRedirect, "/profile")
-	})
-
 	r.GET("/oauth-exchange", func(ctx *gin.Context) {
 		code := ctx.Query("code")
 		verifier := ctx.Query("verifier")
@@ -216,7 +142,7 @@ func main() {
 	})
 
 	r.GET("/", func(ctx *gin.Context) {
-		ctx.File("client/index.html")
+		ctx.File("spa-with-dynamic-backend/index.html")
 	})
 	r.Run(":8080")
 
