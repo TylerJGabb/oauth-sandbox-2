@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Auth0 Front‑Channel Code → /api/login</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: #fafafa;
+      color: #222;
+    }
+
+    #app {
+      max-width: 720px;
+      margin: 0 auto;
+      background: #fff;
+      border: 1px solid #eee;
+      border-radius: 14px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, .05);
+      padding: 1.25rem
+    }
+
+    h1 {
+      font-size: 1.25rem;
+      margin: .2rem 0 1rem
+    }
+
+    button {
+      padding: .6rem 1rem;
+      border-radius: 10px;
+      border: 1px solid #ddd;
+      background: #fff;
+      cursor: pointer
+    }
+
+    pre {
+      background: #f6f7f9;
+      border: 1px solid #eee;
+      border-radius: 10px;
+      padding: .75rem;
+      overflow: auto;
+      max-height: 260px
+    }
+
+    label {
+      display: block;
+      font-size: .9rem;
+      margin: .5rem 0 .25rem
+    }
+
+    input {
+      width: 100%;
+      padding: .6rem .7rem;
+      border-radius: 10px;
+      border: 1px solid #ddd
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem
+    }
+
+    .row {
+      display: flex;
+      gap: .5rem;
+      align-items: center;
+      margin: 1rem 0
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app">
+    <h1>Auth0 SPA: Front‑Channel Authorization Code (PKCE)</h1>
+    <div class="grid" style="margin-top:.5rem">
+      <div>
+        <label>Redirect URI</label>
+        <input id="redirectUri" />
+      </div>
+      <div>
+        <label>Scope</label>
+        <input id="scope" value="openid profile email" />
+      </div>
+    </div>
+    <div class="row">
+      <button id="loginBtn">Start Login</button>
+      <button id="clearBtn">Clear State</button>
+      <span id="status">Idle</span>
+    </div>
+    <h3>Debug</h3>
+    <pre id="debug"></pre>
+  </div>
+  <script>
+    const enc = new TextEncoder();
+    const qs = sel => document.querySelector(sel);
+    const base64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const rand = (n = 32) => base64url(crypto.getRandomValues(new Uint8Array(n)));
+    async function sha256(str) {
+      const data = enc.encode(str)
+      const digest = await crypto.subtle.digest('SHA-256', data)
+      return base64url(digest)
+    }
+    qs('#redirectUri').value = window.location.origin + '/';
+    const setStatus = t => qs('#status').textContent = t;
+    const setDebug = o => qs('#debug').textContent = o ? JSON.stringify(o, null, 2) : '';
+
+    async function startLogin() {
+      const domain = "udemy-tenant-tg.us.auth0.com";
+      const clientId = "gxDR1J8157EUO02GB7CM0yqWnyzBEQOF";
+      const redirectUri = qs('#redirectUri').value.trim();
+      const scope = qs('#scope').value.trim() || 'openid profile email';
+      if (!domain || !clientId) { alert('Enter Auth0 domain and client id'); return; }
+      const state = rand(16);
+      const verifier = rand(64);
+      const challenge = await sha256(verifier);
+      sessionStorage.setItem('pkce_state', state);
+      sessionStorage.setItem('pkce_verifier', verifier);
+      sessionStorage.setItem('a0_redirect', redirectUri);
+      console.log({
+        state,
+        verifier,
+        challenge,
+        clientId,
+        redirectUri,
+        scope
+      })
+      const params = new URLSearchParams({ response_type: 'code', code_challenge_method: 'S256', code_challenge: challenge, client_id: clientId, redirect_uri: redirectUri, scope, state });
+      window.location = `https://${domain}/authorize?${params}`;
+    }
+
+    function handleCallback() {
+      const url = new URL(window.location.href);
+      const code = url.searchParams.get('code');
+      const state = url.searchParams.get('state');
+      if (!code) return;
+      const expectedState = sessionStorage.getItem('pkce_state');
+      const verifier = sessionStorage.getItem('pkce_verifier');
+      const redirectUri = sessionStorage.getItem('a0_redirect') || window.location.origin + '/';
+      if (state !== expectedState) { setDebug({ error: 'state_mismatch', state, expectedState }); return; }
+      // Instead of fetch, redirect with query params
+      const qp = new URLSearchParams({ code, verifier, redirectUri });
+      window.location = `/oauth-callback-2?${qp}`;
+    }
+
+    function clearState() { ['pkce_state', 'pkce_verifier', 'a0_redirect'].forEach(k => sessionStorage.removeItem(k)); setStatus('State cleared'); setDebug(null); }
+    qs('#loginBtn').addEventListener('click', startLogin);
+    qs('#clearBtn').addEventListener('click', clearState);
+    handleCallback();
+  </script>
+</body>
+
+</html>

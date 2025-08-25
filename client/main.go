@@ -135,14 +135,51 @@ func main() {
 		ctx.Redirect(http.StatusTemporaryRedirect, "/profile")
 	})
 
+	r.GET("/oauth-callback-2", func(ctx *gin.Context) {
+		code := ctx.Query("code")
+		verifier := ctx.Query("verifier")
+		redirectUri := ctx.Query("redirectUri")
+		log.Printf("verifier=%s", verifier)
+		log.Printf("redirectUri=%s", redirectUri)
+		log.Printf("code=%s", code)
+		if code == "" || verifier == "" || redirectUri == "" {
+			log.Default().Println("Missing parameters")
+			url := url.URL{
+				Path: "/whoops",
+				RawQuery: url.Values{
+					"error": {"Missing parameters"},
+				}.Encode(),
+			}
+			ctx.Redirect(http.StatusTemporaryRedirect, url.String())
+			return
+		}
+		token, err := oAuthConf.Exchange(
+			ctx.Request.Context(),
+			code,
+			oauth2.VerifierOption(verifier),
+			oauth2.SetAuthURLParam("redirect_uri", redirectUri),
+		)
+		if err != nil {
+			log.Default().Printf("Failed to exchange token: %v", err)
+			url := url.URL{
+				Path: "/whoops",
+				RawQuery: url.Values{
+					"error": {fmt.Sprintf("Failed to exchange token: %v", err)},
+				}.Encode(),
+			}
+			ctx.Redirect(http.StatusTemporaryRedirect, url.String())
+			return
+		}
+		session := sessions.Default(ctx)
+		session.Set("access_token", token.AccessToken)
+		session.Save()
+		ctx.Redirect(http.StatusTemporaryRedirect, "/profile")
+	})
+
 	r.GET("/profile", func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
 		user := session.Get("user")
 		accessToken := session.Get("access_token")
-		if user == nil {
-			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized, session invalid or expired"})
-			return
-		}
 		ctx.JSON(http.StatusOK, gin.H{
 			"user":         user,
 			"access_token": accessToken,
@@ -168,6 +205,9 @@ func main() {
 		ctx.JSON(http.StatusInternalServerError, gin.H{"error": err})
 	})
 
+	r.GET("/", func(ctx *gin.Context) {
+		ctx.File("client/index.html")
+	})
 	r.Run(":8080")
 
 }
