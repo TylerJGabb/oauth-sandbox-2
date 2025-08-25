@@ -22,6 +22,10 @@ func main() {
 	issuer := "https://udemy-tenant-tg.us.auth0.com/"
 	redirectUrl := "http://localhost:8080/oauth-callback"
 
+	if clientId == "" || clientSecret == "" {
+		log.Fatal("OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET must be set")
+	}
+
 	oidcProvider, err := oidc.NewProvider(context.Background(), issuer)
 	if err != nil {
 		panic(err)
@@ -135,13 +139,10 @@ func main() {
 		ctx.Redirect(http.StatusTemporaryRedirect, "/profile")
 	})
 
-	r.GET("/oauth-callback-2", func(ctx *gin.Context) {
+	r.GET("/oauth-exchange", func(ctx *gin.Context) {
 		code := ctx.Query("code")
 		verifier := ctx.Query("verifier")
 		redirectUri := ctx.Query("redirectUri")
-		log.Printf("verifier=%s", verifier)
-		log.Printf("redirectUri=%s", redirectUri)
-		log.Printf("code=%s", code)
 		if code == "" || verifier == "" || redirectUri == "" {
 			log.Default().Println("Missing parameters")
 			url := url.URL{
@@ -178,10 +179,19 @@ func main() {
 
 	r.GET("/profile", func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
-		user := session.Get("user")
 		accessToken := session.Get("access_token")
+		if accessToken == nil {
+			log.Default().Println("No access token in session")
+			url := url.URL{
+				Path: "/whoops",
+				RawQuery: url.Values{
+					"error": {"No access token in session"},
+				}.Encode(),
+			}
+			ctx.Redirect(http.StatusTemporaryRedirect, url.String())
+			return
+		}
 		ctx.JSON(http.StatusOK, gin.H{
-			"user":         user,
 			"access_token": accessToken,
 		})
 	})
