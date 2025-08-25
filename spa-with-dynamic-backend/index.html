@@ -5,7 +5,11 @@
   <title>Auth0 PKCE Login</title>
 </head>
 <body>
+  <label for="audience">Audience: </label>
+  <input id="audience" type="text" value="https://contacts.example.com" size="40" />
+  <br><br>
   <button id="loginBtn">Start Login</button>
+
   <script>
     const enc = new TextEncoder();
     const base64url = buf => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -20,9 +24,12 @@
       const clientId = "gxDR1J8157EUO02GB7CM0yqWnyzBEQOF";
       const redirectUri = "http://localhost:8080/";
       const scope = "openid profile email";
+      const audience = document.getElementById("audience").value;
+
       const state = rand(16);
       const verifier = rand(64);
       const challenge = await sha256(verifier);
+
       sessionStorage.setItem('pkce_state', state);
       sessionStorage.setItem('pkce_verifier', verifier);
 
@@ -33,7 +40,8 @@
         client_id: clientId,
         redirect_uri: redirectUri,
         scope,
-        state
+        state,
+        audience
       });
 
       window.location = `https://${domain}/authorize?${params}`;
@@ -50,7 +58,12 @@
       const expectedState = sessionStorage.getItem('pkce_state');
       const verifier = sessionStorage.getItem('pkce_verifier');
       if (state !== expectedState) return;
-      const qp = new URLSearchParams({ code, verifier, redirectUri: "http://localhost:8080/" });
+      const qp = new URLSearchParams({
+        code,
+        verifier,
+        redirectUri: "http://localhost:8080/"
+      });
+
       window.location = `/oauth-exchange?${qp}`;
     })();
   </script>
