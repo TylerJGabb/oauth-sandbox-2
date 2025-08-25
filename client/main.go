@@ -71,7 +71,10 @@ func main() {
 		session.Save()
 
 		stateNotUsed := "state_not_used"
-		redirectUrl := oAuthConf.AuthCodeURL(stateNotUsed, oauth2.S256ChallengeOption(verifier))
+		redirectUrl := oAuthConf.AuthCodeURL(stateNotUsed,
+			oauth2.S256ChallengeOption(verifier),
+			oauth2.SetAuthURLParam("audience", "https://contacts.example.com"),
+		)
 		ctx.Redirect(http.StatusTemporaryRedirect, redirectUrl)
 	})
 
