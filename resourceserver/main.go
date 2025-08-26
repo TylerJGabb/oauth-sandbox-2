@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"log"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/MicahParks/keyfunc"
 	"github.com/gin-gonic/gin"
@@ -54,8 +56,28 @@ func main() {
 			return
 		}
 
+		if !mapClaims.VerifyIssuer("https://udemy-tenant-tg.us.auth0.com/", true) {
+			c.JSON(401, gin.H{"error": "Invalid issuer"})
+			return
+		}
+
 		if !mapClaims.VerifyAudience("https://contacts.example.com", true) {
 			c.JSON(401, gin.H{"error": "Required audience not found"})
+			return
+		}
+
+		if !mapClaims.VerifyExpiresAt(time.Now().Unix(), true) {
+			c.JSON(401, gin.H{"error": "Token has expired"})
+			return
+		}
+
+		if !mapClaims.VerifyIssuedAt(time.Now().Unix(), true) {
+			c.JSON(401, gin.H{"error": "Token issue time is in the future"})
+			return
+		}
+
+		if !validateScope(mapClaims, "openid") {
+			c.JSON(403, gin.H{"error": "Insufficient scope"})
 			return
 		}
 
@@ -63,4 +85,37 @@ func main() {
 	})
 
 	r.Run(":8081")
+}
+
+// hasScope checks "scope" (space-delimited), "scp" (array), or "permissions" (array).
+func validateScope(claims jwt4.MapClaims, required string) bool {
+	// 1) "scope": "read:contacts write:contacts"
+	if s, ok := claims["scope"].(string); ok {
+		log.Default().Printf("Scopes in token: %s", s)
+		if slices.Contains(strings.Fields(s), required) {
+			return true
+		}
+	}
+
+	// 2) "scp": ["read:contacts", "write:contacts"]
+	if arr, ok := claims["scp"].([]interface{}); ok {
+		log.Default().Printf("Scopes in token: %v", arr)
+		for _, v := range arr {
+			if str, ok := v.(string); ok && str == required {
+				return true
+			}
+		}
+	}
+
+	// 3) Auth0 RBAC "permissions": ["read:contacts"]
+	if arr, ok := claims["permissions"].([]interface{}); ok {
+		log.Default().Printf("Scopes in token: %v", arr)
+		for _, v := range arr {
+			if str, ok := v.(string); ok && str == required {
+				return true
+			}
+		}
+	}
+
+	return false
 }

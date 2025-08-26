@@ -97,8 +97,11 @@ func main() {
 			ctx.Redirect(http.StatusTemporaryRedirect, url.String())
 			return
 		}
+
 		session := sessions.Default(ctx)
 		session.Set("access_token", token.AccessToken)
+		session.Set("id_token", token.Extra("id_token"))
+		session.Set("refresh_token", token.Extra("refresh_token"))
 		session.Save()
 		ctx.Redirect(http.StatusTemporaryRedirect, "/profile")
 	})
@@ -118,7 +121,9 @@ func main() {
 			return
 		}
 		ctx.JSON(http.StatusOK, gin.H{
-			"access_token": accessToken,
+			"access_token":  accessToken,
+			"id_token":      session.Get("id_token"),
+			"refresh_token": session.Get("refresh_token"),
 		})
 	})
 
