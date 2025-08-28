@@ -10,7 +10,6 @@ import (
 	"github.com/MicahParks/keyfunc"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
-	jwt4 "github.com/golang-jwt/jwt/v4"
 )
 
 type CustomClaims struct {
@@ -39,6 +38,36 @@ func (c *CustomClaims) Validate(permissions []string) error {
 	return nil
 }
 
+func requiresPermissions(jwks *keyfunc.JWKS, permissions ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Extract the token from the Authorization header
+		bearerToken := c.Request.Header.Get("Authorization")
+		if bearerToken == "" {
+			c.JSON(401, gin.H{"error": "Missing Authorization Header"})
+			c.Abort()
+			return
+		}
+
+		accessToken := strings.TrimPrefix(bearerToken, "Bearer ")
+
+		customClaims := CustomClaims{}
+		_, err := jwt.ParseWithClaims(accessToken, &customClaims, jwks.Keyfunc)
+		if err != nil {
+			c.JSON(401, gin.H{"error": "Invalid token: " + err.Error()})
+			c.Abort()
+			return
+		}
+
+		if err := customClaims.Validate(permissions); err != nil {
+			c.JSON(401, gin.H{"error": err.Error()})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 func main() {
 
 	r := gin.Default()
@@ -58,35 +87,7 @@ func main() {
 		log.Fatalf("Failed to build keyfunc: %s", err.Error())
 	}
 
-	r.GET("/resource", func(c *gin.Context) {
-		bearerToken := c.Request.Header.Get("Authorization")
-		if bearerToken == "" {
-			c.JSON(401, gin.H{"error": "Missing Authorization Header"})
-			return
-		}
-
-		accessToken := strings.TrimPrefix(bearerToken, "Bearer ")
-		jwtToken, err := jwt4.Parse(accessToken, jwks.Keyfunc)
-		if err != nil {
-			c.JSON(401, gin.H{"error": "Invalid token: " + err.Error()})
-			return
-		}
-
-		// Token is valid, you can use it
-		c.JSON(200, gin.H{"message": "Token is valid", "claims": jwtToken.Claims})
-
-		customClaims := CustomClaims{}
-		_, err = jwt.ParseWithClaims(accessToken, &customClaims, jwks.Keyfunc)
-		if err != nil {
-			c.JSON(401, gin.H{"error": "Invalid token: " + err.Error()})
-			return
-		}
-
-		if err := customClaims.Validate([]string{"test:read"}); err != nil {
-			c.JSON(401, gin.H{"error": err.Error()})
-			return
-		}
-
+	r.GET("/resource", requiresPermissions(jwks, "test:read"), func(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "You have access to the resource!"})
 	})
 

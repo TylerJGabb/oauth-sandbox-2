@@ -24,7 +24,8 @@
       const domain = "udemy-tenant-tg.us.auth0.com";
       const clientId = "gxDR1J8157EUO02GB7CM0yqWnyzBEQOF";
       const redirectUri = "http://localhost:8080/";
-      const scope = "openid profile email";
+      // deliberately request test:boom to show that auth0 will downscope
+      const scope = "openid profile email test:read test:boom";
       const audience = "api:my-test-api"
 
       const state = rand(16);
