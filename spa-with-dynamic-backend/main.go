@@ -39,6 +39,10 @@ func main() {
 		Scopes:       []string{oidc.ScopeOpenID},
 	}
 
+	oidcConfig := oidc.Config{
+		ClientID: clientId,
+	}
+
 	store, err := redis.NewStore(
 		10, // pool size
 		"tcp",
@@ -103,10 +107,36 @@ func main() {
 		session.Set("id_token", token.Extra("id_token"))
 		session.Set("refresh_token", token.Extra("refresh_token"))
 		session.Save()
-		ctx.Redirect(http.StatusTemporaryRedirect, "/profile")
+		ctx.Redirect(http.StatusTemporaryRedirect, "/")
 	})
 
-	r.GET("/profile", func(ctx *gin.Context) {
+	r.GET("/whoami", func(ctx *gin.Context) {
+		session := sessions.Default(ctx)
+		idToken, ok := session.Get("id_token").(string)
+		if !ok {
+			log.Default().Println("No ID token in session")
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+		verifier := oidcProvider.Verifier(&oidcConfig)
+		idTok, err := verifier.Verify(ctx, idToken)
+		if err != nil {
+			log.Default().Printf("Failed to verify ID token: %v", err)
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+		idTokClaims := struct {
+			Name string `json:"name"`
+		}{}
+		if err := idTok.Claims(&idTokClaims); err != nil {
+			log.Default().Printf("Failed to extract claims: %v", err)
+			ctx.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
+			return
+		}
+		ctx.JSON(http.StatusOK, idTokClaims.Name)
+	})
+
+	r.GET("/tokens", func(ctx *gin.Context) {
 		session := sessions.Default(ctx)
 		accessToken := session.Get("access_token")
 		if accessToken == nil {

@@ -1,14 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <title>Auth0 PKCE Login</title>
 </head>
+
 <body>
-  <label for="audience">Audience: </label>
-  <input id="audience" type="text" value="api:my-test-api" size="40" />
   <br><br>
   <button id="loginBtn">Start Login</button>
+  <button id="logoutBtn" style="display:none;">Logout</button>
 
   <script>
     const enc = new TextEncoder();
@@ -24,7 +25,7 @@
       const clientId = "gxDR1J8157EUO02GB7CM0yqWnyzBEQOF";
       const redirectUri = "http://localhost:8080/";
       const scope = "openid profile email";
-      const audience = document.getElementById("audience").value;
+      const audience = "api:my-test-api"
 
       const state = rand(16);
       const verifier = rand(64);
@@ -48,6 +49,25 @@
     }
 
     document.getElementById('loginBtn').addEventListener('click', startLogin);
+    document.getElementById('logoutBtn').addEventListener('click', function () {
+      window.location = '/logout';
+    });
+
+    // Show login button only if /whoami returns non-200
+    fetch('/whoami', { credentials: 'include' })
+      .then(resp => {
+        if (resp.status === 200) {
+          document.getElementById('loginBtn').style.display = 'none';
+          document.getElementById('logoutBtn').style.display = '';
+        } else {
+          document.getElementById('loginBtn').style.display = '';
+          document.getElementById('logoutBtn').style.display = 'none';
+        }
+      })
+      .catch(() => {
+        document.getElementById('loginBtn').style.display = '';
+        document.getElementById('logoutBtn').style.display = 'none';
+      });
 
     // Handle callback if code is present
     (function handleCallback() {
@@ -68,4 +88,5 @@
     })();
   </script>
 </body>
+
 </html>

@@ -9,8 +9,35 @@ import (
 
 	"github.com/MicahParks/keyfunc"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v4"
 	jwt4 "github.com/golang-jwt/jwt/v4"
 )
+
+type CustomClaims struct {
+	jwt.RegisteredClaims
+	Permissions []string `json:"permissions"`
+}
+
+func (c *CustomClaims) Validate(permissions []string) error {
+	if !c.VerifyIssuer("https://udemy-tenant-tg.us.auth0.com/", true) {
+		return fmt.Errorf("invalid issuer")
+	}
+	if !c.VerifyAudience("api:my-test-api", true) {
+		return fmt.Errorf("invalid audience")
+	}
+	if !c.VerifyExpiresAt(time.Now(), true) {
+		return fmt.Errorf("token has expired")
+	}
+	if !c.VerifyIssuedAt(time.Now(), true) {
+		return fmt.Errorf("token is not yet valid")
+	}
+	for _, p := range permissions {
+		if !slices.Contains(c.Permissions, p) {
+			return fmt.Errorf("insufficient permissions: %+v", c.Permissions)
+		}
+	}
+	return nil
+}
 
 func main() {
 
@@ -45,39 +72,18 @@ func main() {
 			return
 		}
 
-		fmt.Printf("Claims runtime type: %T\n", jwtToken.Claims)
-
 		// Token is valid, you can use it
 		c.JSON(200, gin.H{"message": "Token is valid", "claims": jwtToken.Claims})
 
-		mapClaims, ok := jwtToken.Claims.(jwt4.MapClaims)
-		if !ok {
-			c.JSON(401, gin.H{"error": "Can not extract claims"})
+		customClaims := CustomClaims{}
+		_, err = jwt.ParseWithClaims(accessToken, &customClaims, jwks.Keyfunc)
+		if err != nil {
+			c.JSON(401, gin.H{"error": "Invalid token: " + err.Error()})
 			return
 		}
 
-		if !mapClaims.VerifyIssuer("https://udemy-tenant-tg.us.auth0.com/", true) {
-			c.JSON(401, gin.H{"error": "Invalid issuer"})
-			return
-		}
-
-		if !mapClaims.VerifyAudience("https://contacts.example.com", true) {
-			c.JSON(401, gin.H{"error": "Required audience not found"})
-			return
-		}
-
-		if !mapClaims.VerifyExpiresAt(time.Now().Unix(), true) {
-			c.JSON(401, gin.H{"error": "Token has expired"})
-			return
-		}
-
-		if !mapClaims.VerifyIssuedAt(time.Now().Unix(), true) {
-			c.JSON(401, gin.H{"error": "Token issue time is in the future"})
-			return
-		}
-
-		if !validateScope(mapClaims, "openid") {
-			c.JSON(403, gin.H{"error": "Insufficient scope"})
+		if err := customClaims.Validate([]string{"test:read"}); err != nil {
+			c.JSON(401, gin.H{"error": err.Error()})
 			return
 		}
 
@@ -85,37 +91,4 @@ func main() {
 	})
 
 	r.Run(":8081")
-}
-
-// hasScope checks "scope" (space-delimited), "scp" (array), or "permissions" (array).
-func validateScope(claims jwt4.MapClaims, required string) bool {
-	// 1) "scope": "read:contacts write:contacts"
-	if s, ok := claims["scope"].(string); ok {
-		log.Default().Printf("Scopes in token: %s", s)
-		if slices.Contains(strings.Fields(s), required) {
-			return true
-		}
-	}
-
-	// 2) "scp": ["read:contacts", "write:contacts"]
-	if arr, ok := claims["scp"].([]interface{}); ok {
-		log.Default().Printf("Scopes in token: %v", arr)
-		for _, v := range arr {
-			if str, ok := v.(string); ok && str == required {
-				return true
-			}
-		}
-	}
-
-	// 3) Auth0 RBAC "permissions": ["read:contacts"]
-	if arr, ok := claims["permissions"].([]interface{}); ok {
-		log.Default().Printf("Scopes in token: %v", arr)
-		for _, v := range arr {
-			if str, ok := v.(string); ok && str == required {
-				return true
-			}
-		}
-	}
-
-	return false
 }
