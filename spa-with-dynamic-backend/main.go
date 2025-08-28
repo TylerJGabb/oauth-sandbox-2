@@ -138,7 +138,15 @@ func main() {
 			SameSite: http.SameSiteLaxMode,
 		})
 		session.Save()
-		ctx.JSON(http.StatusOK, gin.H{"message": "Logged out"})
+		url := url.URL{
+			Scheme: "https",
+			Host:   "udemy-tenant-tg.us.auth0.com",
+			Path:   "/v2/logout",
+			RawQuery: url.Values{
+				"returnTo": {"http://localhost:8080"},
+			}.Encode(),
+		}
+		ctx.Redirect(http.StatusTemporaryRedirect, url.String())
 	})
 
 	r.GET("/whoops", func(ctx *gin.Context) {
